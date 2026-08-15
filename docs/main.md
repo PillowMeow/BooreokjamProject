@@ -10,6 +10,7 @@
 | X | 폭탄 |
 | R | 재시작 |
 | P | 일시정지 |
+| M | 음소거 |
 
 **폭탄**은 화면의 적탄을 전부 지우고 1초(60프레임) 무적을 준다. `bombProof: true`인 탄은 지워지지 않는다.
 개수 제한은 없고, 사용 횟수만 결과에 기록된다.
@@ -29,6 +30,7 @@ export default {
   hp: 1800,                   // clear: 'boss' 일 때 보스 체력
   seconds: 40,                // clear: 'survival' 일 때 버틸 시간(초)
   thresholds: [0.66, 0.33],   // 임계점. 넘을 때마다 s.phase가 1 오르고 보스바에 눈금이 찍힌다.
+  difficulty: { density: 5, speed: 4, special: 4 },   // 0~10 정수 3개. UI에 막대로 표시된다.
   sprite: './sprites/boss.png', // 선택. 기본값이 이것.
   spriteScale: 0.21,          // 선택. 생략하면 세로 54px에 맞춰 자동으로 줄인다.
 
@@ -203,6 +205,33 @@ s.every(20, fn, times)  s.after(60, fn)  s.burst({ count, gap, fn })  s.ramp(0, 
 겹친 탄끼리 구분되도록 아주 얇은(1px) 어두운 윤곽선도 두른다. 새 색을 추가할 때 어두운 색은 피하는 게 좋다.
 로컬 파일로 불러오는 패턴은 상대 import를 못 쓰므로 `s.C.cyan`처럼 쓰면 된다.
 
+## 난이도
+
+패턴에 `difficulty`를 적으면 UI 패널에 막대로 표시된다. 세 항목 모두 **0~10 정수**다.
+
+| 항목 | 뜻 |
+|---|---|
+| `density` (탄밀) | 화면을 채우는 탄의 빽빽함 |
+| `speed` (탄속) | 탄이 날아오는 속도, 반응 시간 |
+| `special` (특수) | 유도·궤도·예약 변화 등 특이 거동의 비중 |
+
+`{ density, speed, special }` 대신 `[5, 4, 4]` 배열로 적어도 되고, 범위를 벗어나거나 빠뜨린 값은
+0~10 정수로 알아서 맞춰진다. 아예 없으면 "난이도 미표기"로 뜬다.
+
+## 소리
+
+탄이 생성될 때 **모양별로 다른 소리**가 난다. 오디오 파일 없이 WebAudio로 합성하므로 받을 것도, 저작권 문제도 없다.
+
+- `circle` 짧은 블립 / `orb` 낮은 둔탁음 / `wedge` 날카로운 틱 / `rod` 위로 훑는 레이저음
+- 폭탄과 사망에도 소리가 붙는다.
+- 탄이 **클수록 낮은 소리**, 한 번에 **많이 쏠수록 조금 큰 소리**가 난다.
+- 소리는 탄 하나가 아니라 **발사 한 번(fire 호출)에 한 번** 난다. 같은 소리는 45ms 안에 겹치지 않고,
+  동시 재생은 10개로 제한된다.
+- 발사 옵션으로 끄거나 바꿀 수 있다: `sound: false`, `sound: 'orb'`
+- 브라우저 정책상 **첫 키 입력이나 클릭 전에는 소리가 나지 않는다.** M 키 또는 패널 버튼으로 음소거,
+  슬라이더로 음량을 조절한다.
+- 음색은 [`src/engine/audio.js`](../src/engine/audio.js)의 `PRESETS` 한 곳에 모여 있다.
+
 ## 구조
 
 | 파일 | 역할 |
@@ -222,6 +251,7 @@ s.every(20, fn, times)  s.after(60, fn)  s.burst({ count, gap, fn })  s.ramp(0, 
 | `src/engine/color.js` | HSV / OKLCH, 그라데이션 |
 | `src/engine/group.js` | 발사한 탄 묶음을 나중에 조작 |
 | `src/engine/assets.js` | 스프라이트 로딩 |
+| `src/engine/audio.js` | 탄 생성음 합성 (WebAudio) |
 | `src/engine/render.js` | 캔버스 그리기 — 격자 배경, 탄 모양, 보스 게이지, 화면 흔들림, 결과 |
 | `src/engine/input.js` | 키 상태 |
 | `src/engine/rng.js` | 시드 고정 난수 |

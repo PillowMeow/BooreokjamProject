@@ -5,6 +5,7 @@ export default {
   name: '헬퍼 데모',
   clear: 'survival',
   seconds: 60,
+  difficulty: { density: 5, speed: 3, special: 8 },
   thresholds: [0.75, 0.5, 0.25],
 
   *main(s) {

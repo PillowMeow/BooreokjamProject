@@ -16,6 +16,7 @@ export default {
   hp: 1800,                 // clear: 'boss' 일 때 보스 체력
   seconds: 40,              // clear: 'survival' 일 때 버틸 시간(초)
   thresholds: [0.66, 0.33], // 임계점
+  difficulty: { density: 5, speed: 4, special: 4 },  // 0~10 정수 3개
   sprite: './sprites/boss.png',
   spriteScale: 0.21,
 
@@ -100,6 +101,24 @@ thresholds: [1200, 600]    // hp: 1800 이면 위와 같은 뜻 (1보다 크면 
 - **히트박스는 그려지는 사각형 그대로**다 (`boss.w` × `boss.h`). 원이 아니다.
 - `spriteScale`을 생략하면 **세로 54px**에 맞춰 자동 축소한다. 448×256 스프라이트면 94.5×54가 된다.
 - 이미지를 못 불러오면 콘솔에 경고가 뜨고 보스는 32px 원으로 대체된다.
+
+### `difficulty` — 난이도 표기
+
+패턴을 고르면 UI 패널에 막대로 뜬다. 세 항목 모두 **0~10 정수**다.
+
+| 항목 | 뜻 | 올리는 것 |
+|---|---|---|
+| `density` (탄밀) | 화면이 얼마나 빽빽한가 | 탄 수, 동시 공격 수, 발사 간격 |
+| `speed` (탄속) | 반응할 시간이 얼마나 있는가 | `speed`, `accel`, 조준탄 비중 |
+| `special` (특수) | 읽기 어려운 거동이 얼마나 있는가 | 유도·궤도·예약 변경·지연 등장 |
+
+```js
+difficulty: { density: 5, speed: 4, special: 4 }
+difficulty: [5, 4, 4]        // 배열도 된다 (탄밀, 탄속, 특수 순서)
+```
+
+범위를 벗어나거나 빠뜨린 값은 0~10 정수로 맞춰진다(`12` → `10`, 빠진 항목 → `0`).
+아예 없으면 "난이도 미표기"로 뜬다.
 
 ### `init(s)`
 
@@ -661,6 +680,7 @@ BulletPro의 배치/거동 분리를 이 엔진 형태로 옮긴 것이다.
 | `jitter` | 위치를 ±이만큼 흩뿌린다 |
 | `ramp` | `{ speed:[a,b], size:[a,b], color:[c1,c2] 또는 (t)=>값 }` — i에 따라 배분 |
 | `each` | `(bullet, i, count) => void` 생성 직후 콜백 |
+| `sound` | `false`면 무음, 문자열이면 그 소리로 (`'circle'` `'orb'` `'wedge'` `'rod'`) |
 
 ```js
 s.fire(opts)                                              // 1발
@@ -821,3 +841,19 @@ yield* s.sequence(a(s), b(s));                                 // 차례로
 `yield s.join(t)`로 기다릴 수 있다. `fn`이 `false`를 돌려주면 `every`는 거기서 멈춘다.
 
 전부 쓰는 예시는 [`src/patterns/helpers.js`](../src/patterns/helpers.js) (`?p=./patterns/helpers.js`)에 있다.
+
+### 14.9 소리
+
+탄이 생성될 때 `shape`에 따라 다른 소리가 난다. 패턴이 따로 할 일은 없다.
+
+- 소리는 **탄 하나가 아니라 `fire*` 호출 한 번에 한 번** 난다. 링 20발을 쏴도 소리는 하나다.
+- 탄이 클수록 낮고, 한 번에 많이 쏠수록 조금 크다.
+- 같은 소리는 45ms 안에 겹치지 않고, 동시 재생은 10개까지다. 매 프레임 쏘는 루프에서도 시끄러워지지 않는다.
+- 끄거나 바꾸려면 발사 옵션을 쓴다.
+
+```js
+s.fireRing({ ..., sound: false })    // 이 발사는 무음 (배경처럼 깔리는 탄에)
+s.fire({ ..., sound: 'orb' })        // 모양은 circle이지만 소리는 orb (큰 탄처럼 들리게)
+```
+
+브라우저 정책상 첫 키 입력·클릭 전에는 소리가 나지 않는다. 음소거는 M 키.

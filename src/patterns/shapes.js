@@ -18,6 +18,7 @@ export default {
   clear: 'boss',
   hp: 4000,
   thresholds: [0.5],
+  difficulty: { density: 3, speed: 3, special: 1 },
 
   *main(s) {
     const core = s.boss;

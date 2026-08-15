@@ -9,6 +9,7 @@ import * as M from './mathx.js';
 import * as COLOR from './color.js';
 import * as L from './layout.js';
 import { C } from '../palette.js';
+import { audio } from './audio.js';
 
 // 탄에 그대로 넘길 수 있는 필드. 배치용 옵션(origin, facing 등)이 탄에 섞이지 않게 화이트리스트로 거른다.
 const BULLET_KEYS = [
@@ -427,6 +428,13 @@ export class Stage {
         out.push(b);
       }
     }
+
+    // 소리는 탄 하나마다가 아니라 이 발사 한 번에 대해 한 번만 낸다.
+    // sound: false 로 끄거나, sound: 'orb' 처럼 다른 소리를 쓸 수 있다.
+    if (out.length && opts.sound !== false) {
+      const first = out[0];
+      audio.bullets(opts.sound ?? first.shape, out.length, first.size);
+    }
     return out;
   }
 
@@ -468,6 +476,7 @@ export class Stage {
     this.clearBombable();
     this.player.grantInvuln(BOMB_INVULN);
     this.addShake(...BOMB_SHAKE);
+    audio.event('bomb');
   }
 
   /** 현재 흔들림 진폭. 지속 시간에 걸쳐 선형으로 잦아든다. */
@@ -544,6 +553,7 @@ export class Stage {
           // 사망 = 화면 흔들림 + 폭탄 효과 (폭탄 사용 횟수에는 안 들어간다)
           this.clearBombable();
           this.addShake(...DEATH_SHAKE);
+          audio.event('death');
           return;
         }
         continue;

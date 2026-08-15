@@ -5,6 +5,7 @@ export default {
   name: '나선 연습',
   clear: 'survival',
   seconds: 40,
+  difficulty: { density: 6, speed: 5, special: 2 },
   thresholds: [0.66, 0.33],   // 남은 시간 비율 기준
 
   *main(s) {
