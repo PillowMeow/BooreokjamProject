@@ -32,7 +32,7 @@ export function fanPoints({ count = 5, angle = 0, spread = Math.PI / 6, radius =
   return out;
 }
 
-export function linePoints({ from, to, count = 5, angle = Math.PI / 2 }) {
+export function linePoints({ from = { x: -60, y: 0 }, to = { x: 60, y: 0 }, count = 5, angle = Math.PI / 2 }) {
   const out = [];
   const tangent = Math.atan2(to.y - from.y, to.x - from.x);
   for (let i = 0; i < count; i++) {

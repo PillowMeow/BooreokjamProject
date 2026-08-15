@@ -24,6 +24,11 @@ export class BulletGroup {
     return n;
   }
 
+  /**
+   * 묶음의 탄을 하나씩 꺼내 실행한다 (죽은 탄은 건너뛴다).
+   * @param {(b: import('./bullets.js').Bullet, i: number, count: number) => void} fn
+   * @returns {this}
+   */
   each(fn) {
     let i = 0;
     for (const b of this.bullets) {

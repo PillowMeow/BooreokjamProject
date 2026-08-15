@@ -21,9 +21,9 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         self.send_header("Expires", "0")
         super().end_headers()
 
-    def log_message(self, fmt, *args):
-        if "404" in (fmt % args):
-            super().log_message(fmt, *args)
+    def log_message(self, format, *args):
+        if "404" in (format % args):
+            super().log_message(format, *args)
 
 
 def main():

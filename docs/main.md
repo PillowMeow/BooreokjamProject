@@ -18,8 +18,8 @@
 
 ## 탄막 파일 작성
 
-> 아래는 요약이다. 전체 명세(실행 모델, API 레퍼런스, 관용구, 흔한 실수, 디버깅)는
-> **[docs/patterns.md](docs/patterns.md)**에 있다.
+> **처음이라면 [치트시트](cheatsheet.md) 한 장 + [`src/patterns/template.js`](../src/patterns/template.js) 복사로 시작하면 된다.**
+> 아래는 요약이고, 전체 명세(실행 모델, API 레퍼런스, 관용구, 흔한 실수, 디버깅)는 [patterns.md](patterns.md)에 있다.
 
 
 ```js

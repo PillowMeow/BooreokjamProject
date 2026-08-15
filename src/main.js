@@ -2,7 +2,7 @@ import { Engine } from './engine/engine.js';
 import { preparePattern } from './engine/assets.js';
 import { createUI, validate } from './ui.js';
 
-const DEFAULT_PATTERN = './patterns/sample.js';
+const DEFAULT_PATTERN = './patterns/template.js';
 
 const params = new URLSearchParams(location.search);
 const patternPath = params.get('p') ?? DEFAULT_PATTERN;

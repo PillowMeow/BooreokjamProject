@@ -10,6 +10,7 @@ import * as COLOR from './color.js';
 import * as L from './layout.js';
 import { C } from '../palette.js';
 import { audio } from './audio.js';
+import { guardStage } from './guard.js';
 
 // 탄에 그대로 넘길 수 있는 필드. 배치용 옵션(origin, facing 등)이 탄에 섞이지 않게 화이트리스트로 거른다.
 const BULLET_KEYS = [
@@ -18,8 +19,138 @@ const BULLET_KEYS = [
   'onUpdate', 'data', 'delay', 'motion', 'plan',
 ];
 
+/**
+ * 패턴 파일이 export default 로 내보내는 객체.
+ * export default 앞에 @type {Pattern} 주석을 붙이면 main(s) 의 s 가 자동으로 Stage 로 잡힌다.
+ * @typedef {Object} Pattern
+ * @property {string} name UI·콘솔에 뜨는 이름
+ * @property {'boss'|'survival'} [clear] 보스를 잡아서 클리어 / 시간을 버텨서 클리어
+ * @property {number} [hp] clear: 'boss' 일 때 보스 체력 (초당 60씩 깎인다)
+ * @property {number} [seconds] clear: 'survival' 일 때 버틸 시간(초)
+ * @property {number[]} [thresholds] 임계점. 게이지가 지날 때마다 s.phase 가 오른다
+ * @property {{density: number, speed: number, special: number}|[number, number, number]} [difficulty] 0~10 정수 3개
+ * @property {string} [sprite] 보스 스프라이트 경로
+ * @property {number} [spriteScale]
+ * @property {(s: Stage) => void} [init] 시작 전 1회
+ * @property {(s: Stage) => Generator} main 필수. 반드시 제너레이터
+ */
+
+/**
+ * 탄 거동 모듈. type에 따라 쓰는 값이 다르다.
+ * @typedef {{type: 'wave', amp?: number, period?: number, phase?: number}
+ *   | {type: 'orbit', center: {x: number, y: number}|'player'|'boss', radius?: number, omega?: number, radiusSpeed?: number}
+ *   | {type: 'homing', turn?: number, frames?: number, target?: {x: number, y: number}|'player'|'boss'}
+ *   | {type: 'path', path: (t: number) => {x: number, y: number}, frames?: number, loop?: boolean,
+ *      origin?: {x: number, y: number}, relative?: boolean, ease?: string, after?: 'vanish'}
+ *   | {type: 'bounce', times?: number, padding?: number, floor?: boolean}} MotionOptions
+ */
+
+/**
+ * 예약 변경 한 단계. at은 탄의 나이(프레임).
+ * @typedef {Object} PlanStep
+ * @property {number} at 탄의 나이(프레임)
+ * @property {number} [over] 이 프레임 수 동안 보간 (없으면 즉시)
+ * @property {'linear'|'in'|'out'|'inOut'|'inCubic'|'outCubic'|'sine'|'back'} [ease] over와 함께 쓴다
+ * @property {number|'aim'|((b: import('./bullets.js').Bullet, s: Stage) => number)} [angle]
+ * @property {number|((b: import('./bullets.js').Bullet, s: Stage) => number)} [speed]
+ * @property {number} [omega]
+ * @property {number} [accel]
+ * @property {number} [size]
+ * @property {number} [r]
+ * @property {string} [color]
+ * @property {boolean} [vanish] true면 그 시점에 사라진다
+ * @property {MotionOptions} [motion]
+ */
+
+/**
+ * i번째 탄에 값을 배분한다. 숫자는 [처음, 마지막], 색은 [처음색, 마지막색] 또는 함수.
+ * @typedef {Object} RampOptions
+ * @property {[number, number]|((t: number) => number)} [speed]
+ * @property {[number, number]|((t: number) => number)} [size]
+ * @property {[number, number]|((t: number) => number)} [r]
+ * @property {[string, string]|((t: number) => string)} [color]
+ */
+
+/**
+ * 발사 옵션. 탄 속성 + 배치 옵션을 한꺼번에 받는다.
+ * (편집기에서 이 목록이 자동완성으로 뜬다)
+ *
+ * @typedef {Object} FireOptions
+ * -- 위치·방향 --
+ * @property {number} [x] 발사 위치 x (기본 0)
+ * @property {number} [y] 발사 위치 y (아래쪽이 +)
+ * @property {number} [angle] 진행 방향(라디안). s.deg(90)=아래, s.deg(-90)=위
+ * @property {number} [speed] 프레임당 픽셀. 2면 초당 120px
+ * -- 탄 모양 --
+ * @property {'circle'|'orb'|'wedge'|'rod'} [shape] 모양 (기본 circle)
+ * @property {number} [size] 그리기 크기 (기본 3). orb를 크게 하려면 10 이상
+ * @property {number} [r] 판정 반지름 (기본 2.5). 보통 size보다 1~2 작게
+ * @property {string} [color] 색. s.C.magenta 같은 팔레트나 '#rrggbb'
+ * -- 움직임 --
+ * @property {number} [accel] 프레임당 속도 증감
+ * @property {number} [omega] 프레임당 각도 증감(라디안). 휘는 탄
+ * @property {number} [minSpeed] accel 적용 시 하한
+ * @property {number} [maxSpeed] accel 적용 시 상한
+ * @property {MotionOptions} [motion] 거동 모듈
+ * @property {PlanStep[]} [plan] 예약 변경 [{ at: 60, speed: 0 }]
+ * @property {(b: import('./bullets.js').Bullet, s: Stage) => void} [onUpdate] 매 프레임 호출
+ * -- 기타 --
+ * @property {number} [life] 수명 프레임 (0=무제한)
+ * @property {number} [delay] 등장 지연. 그동안 판정 없이 예고 표시
+ * @property {boolean} [bombProof] 폭탄으로 안 지워짐
+ * @property {any} [data] 자유롭게 쓰는 칸 (이름표 등)
+ * @property {false|'circle'|'orb'|'wedge'|'rod'} [sound] false면 무음
+ * -- 배치 (fireRing/fireFan/firePolygon 등) --
+ * @property {number} [count] 발 수
+ * @property {number} [spread] fireFan 전체 벌어짐 각(라디안)
+ * @property {number} [radius] 중심에서 띄울 거리 / 도형 크기
+ * @property {{x: number, y: number}} [origin] 배치 기준점
+ * @property {{x: number, y: number}} [center] origin과 같음 (도형에서 쓰는 이름)
+ * @property {number} [rotation] 배치 전체 회전
+ * @property {'out'|'in'|'aim'|'along'|'normal'|number} [facing] 각 탄이 향할 방향
+ * @property {'absolute'|'aim'|'sequence'} [aimType] angle 해석 방식
+ * @property {boolean} [keepShape] 도형이 모양 그대로 확대되게
+ * @property {number} [jitter] 위치를 이만큼 흩뿌림
+ * @property {RampOptions} [ramp] i에 따라 값 배분 { speed:[1,3], color:[c1,c2] }
+ * @property {(b: import('./bullets.js').Bullet, i: number, count: number) => void} [each] 생성 직후 콜백
+ * -- 도형별 --
+ * @property {{x: number, y: number}} [from] fireLine 시작점
+ * @property {{x: number, y: number}} [to] fireLine 끝점
+ * @property {number} [sides] firePolygon 변의 수
+ * @property {number} [perSide] firePolygon 변마다 발 수
+ * @property {'outline'|'vertex'} [mode] firePolygon 배치 방식
+ * @property {number} [points] fireStar 뿔 수
+ * @property {number} [inner] fireStar 안쪽 반지름
+ * @property {number} [outer] fireStar 바깥 반지름
+ * @property {number} [perEdge] fireStar 변마다 발 수
+ * @property {number} [cols] fireGrid 열
+ * @property {number} [rows] fireGrid 행
+ * @property {number} [gapX] fireGrid 가로 간격
+ * @property {number} [gapY] fireGrid 세로 간격
+ * @property {boolean} [closed] firePath 닫힌 곡선인지
+ */
+
+/**
+ * @typedef {Object} EnemyOptions
+ * @property {number} [x]
+ * @property {number} [y]
+ * @property {number} [hp] 체력 (기본 100)
+ * @property {number} [r] 판정 반지름 (기본 16)
+ * @property {string} [color]
+ * @property {boolean} [invuln] true면 플레이어 탄에 안 맞음
+ * @property {boolean} [boss] true면 화면 위 게이지의 주인이 된다
+ * @property {(e: import('./enemy.js').Enemy, s: Stage) => void} [onDeath] 죽을 때 호출
+ * @property {any} [data]
+ * @property {HTMLImageElement|null} [sprite] 스프라이트 (보스는 엔진이 넣는다)
+ * @property {number} [spriteScale]
+ * @property {number} [w]
+ * @property {number} [h]
+ */
+
 // 화면 흔들림: [진폭(px), 지속 프레임]
+/** @type {[number, number]} */
 const DEATH_SHAKE = [7, 20];
+/** @type {[number, number]} */
 const BOMB_SHAKE = [10, 24];   // 폭탄은 크게, 0.4초
 
 // 스프라이트를 쓰기 전 원형 보스는 반지름 18(지름 36)이었다. 그 1.5배인 세로 54px에
@@ -62,6 +193,9 @@ export class Stage {
 
     this.stats = { bombs: 0, fired: 0 };
     this.lastAngle = 0;   // aimType: 'sequence' 가 기준으로 삼는 직전 발사각
+    this.angleWarned = false;
+    // 패턴에는 이걸 넘긴다. 없는 함수를 부르면 이름을 알려주며 오류를 낸다.
+    this.api = guardStage(this);
     this.shakeAmp = 0;
     this.shakeLeft = 0;
     this.shakeTotal = 1;
@@ -92,8 +226,8 @@ export class Stage {
       color: '#7ffcd8',
     });
 
-    if (typeof this.pattern.init === 'function') this.pattern.init(this);
-    this.mainTask = this.scheduler.add(this.pattern.main(this));
+    if (typeof this.pattern.init === 'function') this.pattern.init(this.api);
+    this.mainTask = this.scheduler.add(this.pattern.main(this.api));
   }
 
   // ── 조회 ──────────────────────────────────────────────────────────
@@ -125,23 +259,63 @@ export class Stage {
     return Math.max(0, (this.duration - this.frame) / FPS);
   }
 
-  /** from에서 플레이어를 향하는 각도 */
+  /**
+   * from에서 플레이어를 향하는 각도(라디안). 조준탄에 쓴다.
+   * @param {{x: number, y: number}} from 보통 s.boss 또는 탄
+   * @returns {number} 라디안
+   */
   aim(from) {
     return Math.atan2(this.player.y - from.y, this.player.x - from.x);
   }
 
+  /**
+   * 두 점 사이 각도(라디안).
+   * @param {{x: number, y: number}} from
+   * @param {{x: number, y: number}} to
+   * @returns {number} 라디안
+   */
   angleTo(from, to) {
     return Math.atan2(to.y - from.y, to.x - from.x);
   }
 
+  /**
+   * 도 -> 라디안. 각도 자리에는 반드시 이걸 거쳐서 넣는다.
+   * @param {number} d 도(0~360)
+   * @returns {number} 라디안
+   */
   deg(d) { return (d * Math.PI) / 180; }
 
+  /**
+   * min 이상 max 미만 실수. 시드 고정이라 재생할 때마다 같다.
+   * @param {number} [min]
+   * @param {number} [max]
+   * @returns {number}
+   */
   rand(min = 0, max = 1) { return this.rng.range(min, max); }
+  /**
+   * min 이상 max 이하 정수.
+   * @param {number} min
+   * @param {number} max
+   * @returns {number}
+   */
   randInt(min, max) { return this.rng.int(min, max); }
+  /**
+   * 배열에서 하나 고른다.
+   * @template T
+   * @param {T[]} arr
+   * @returns {T}
+   */
   pick(arr) { return this.rng.pick(arr); }
 
   // ── 좌표·각도 ─────────────────────────────────────────────────────
 
+  /**
+   * 각도·거리로 좌표를 만든다.
+   * @param {number} angle 라디안
+   * @param {number} dist 거리
+   * @param {{x: number, y: number}} [origin] 기준점 (없으면 원점)
+   * @returns {{x: number, y: number}}
+   */
   polar(angle, dist, origin) { return M.polar(angle, dist, origin); }
   dist(a, b) { return M.dist(a, b); }
   wrapAngle(a) { return M.wrapAngle(a); }
@@ -157,6 +331,13 @@ export class Stage {
   // ── 경로 (배치와 이동 양쪽에서 쓴다) ──────────────────────────────
 
   pathCircle(radius, opts) { return M.pathCircle(radius, opts); }
+  /**
+   * 정다각형 궤도. firePath나 motion:'path'에 넣는다.
+   * @param {number} sides 변의 수
+   * @param {number} radius 크기
+   * @param {{center?: {x: number, y: number}, rotation?: number}} [opts]
+   * @returns {(t: number) => {x: number, y: number}}
+   */
   pathPolygon(sides, radius, opts) { return M.pathPolygon(sides, radius, opts); }
   pathStar(points, inner, outer, opts) { return M.pathStar(points, inner, outer, opts); }
   pathLine(from, to) { return M.pathLine(from, to); }
@@ -215,18 +396,53 @@ export class Stage {
   // 그라데이션은 oklch를 권한다. hsv는 색상을 돌리면 밝기가 들쭉날쭉하지만
   // oklch는 같은 l 값이면 어느 색상이든 비슷한 밝기로 보인다.
 
+  /**
+   * @param {number} h 색상 0~360
+   * @param {number} [s] 채도 0~1
+   * @param {number} [v] 명도 0~1
+   * @returns {string} '#rrggbb'
+   */
   hsv(h, s = 1, v = 1) { return COLOR.hsv(h, s, v); }
   hsl(h, s = 1, l = 0.5) { return COLOR.hsl(h, s, l); }
+  /**
+   * 지각적으로 균일한 색. 그라데이션에 권장.
+   * @param {number} l 밝기 0~1 (탄은 0.75~0.88이 잘 보인다)
+   * @param {number} c 채도 0~0.37
+   * @param {number} h 색상 0~360
+   * @returns {string} '#rrggbb'
+   */
   oklch(l, c, h) { return COLOR.oklch(l, c, h); }
+  /**
+   * 두 색을 섞는다 (OKLab).
+   * @param {string} a
+   * @param {string} b
+   * @param {number} t 0이면 a, 1이면 b
+   * @returns {string} '#rrggbb'
+   */
   mix(a, b, t) { return COLOR.mix(a, b, t); }
   gradient(colors, opts) { return COLOR.gradient(colors, opts); }
   hueShift(color, deg) { return COLOR.hueShift(color, deg); }
   lightenColor(color, amount) { return COLOR.lighten(color, amount); }
+  /**
+   * 무지개 한 바퀴.
+   * @param {number} t 0~1
+   * @param {{l?: number, c?: number}} [opts]
+   * @returns {string} '#rrggbb'
+   */
   rainbow(t, opts) { return COLOR.rainbow(t, opts); }
 
   // ── 태스크 조합기 ─────────────────────────────────────────────────
 
   /** interval 프레임마다 fn을 실행하는 태스크. fn(i)가 false를 돌려주면 멈춘다. */
+  /**
+   * interval 프레임마다 fn 실행 (바로 한 번 실행하고 시작한다).
+   * 리듬이 조금이라도 복잡하면 fork + yield 를 쓰는 편이 낫다.
+   * @param {number} interval 프레임 간격
+   * @param {(i: number, s: Stage) => any} fn false를 돌려주면 멈춘다
+   * @param {number} [times] 반복 횟수 (기본 무한)
+   * @param {{alive: boolean}} [owner]
+   * @returns {{done: boolean}}
+   */
   every(interval, fn, times = Infinity, owner = null) {
     const self = this;
     return this.fork(function* () {
@@ -238,6 +454,13 @@ export class Stage {
   }
 
   /** frames 프레임 뒤에 한 번 */
+  /**
+   * frames 프레임 뒤에 fn을 한 번 실행한다.
+   * @param {number} frames
+   * @param {(s: Stage) => void} fn
+   * @param {{alive: boolean}} [owner]
+   * @returns {{done: boolean}}
+   */
   after(frames, fn, owner = null) {
     const self = this;
     return this.fork(function* () {
@@ -247,6 +470,11 @@ export class Stage {
   }
 
   /** gap 간격으로 count번 연사 */
+  /**
+   * gap 간격으로 count번 연사한다.
+   * @param {{count?: number, gap?: number, fn: (i: number, s: Stage) => any, owner?: {alive: boolean}}} opts
+   * @returns {{done: boolean}}
+   */
   burst({ count = 3, gap = 6, fn, owner = null }) {
     return this.every(gap, fn, count, owner);
   }
@@ -282,9 +510,17 @@ export class Stage {
   // ── 시간 ──────────────────────────────────────────────────────────
 
   /** yield s.wait(30) — 그냥 yield 30 과 같다. 읽기 좋으라고 있는 것. */
+  /**
+   * yield s.wait(30) — 그냥 yield 30 과 같다.
+   * @param {number} frames
+   */
   wait(frames) { return frames; }
 
   /** yield s.until(() => boss.hp < 500) */
+  /**
+   * yield s.until(() => 조건) — 조건이 참이 될 때까지 기다린다.
+   * @param {() => boolean} predicate
+   */
   until(predicate) { return predicate; }
 
   /** 태스크가 끝날 때까지 대기: yield s.join(task) */
@@ -294,6 +530,7 @@ export class Stage {
   untilGauge(v) { return () => this.gauge <= v; }
 
   /** 다음 임계점을 넘을 때까지: yield s.untilPhaseChange() */
+  /** yield s.untilPhaseChange() — 다음 임계점을 넘을 때까지 기다린다. */
   untilPhaseChange() {
     const from = this.phase;
     return () => this.phase !== from || !!this.result;
@@ -305,15 +542,30 @@ export class Stage {
    * 병렬 태스크를 띄운다. genOrFn은 제너레이터이거나 제너레이터를 만드는 함수.
    * owner를 주면 그 객체가 죽을 때 태스크도 같이 끝난다.
    */
+  /**
+   * 공격 하나를 병렬로 돌린다. 공격 하나 = function* 하나.
+   * @param {Generator|((s: Stage) => Generator)} genOrFn
+   * @param {{alive: boolean}} [owner] 이게 죽으면 태스크도 끝난다 (보통 s.boss)
+   * @returns {{done: boolean}} s.cancel()에 넣을 수 있는 태스크
+   */
   fork(genOrFn, owner = null) {
     const gen = typeof genOrFn === 'function' ? genOrFn(this) : genOrFn;
     return this.scheduler.add(gen, owner);
   }
 
+  /**
+   * fork로 띄운 태스크를 멈춘다. 그 안에서 fork한 것까지 함께 정리된다.
+   * @param {{done: boolean}} task
+   */
   cancel(task) { this.scheduler.cancel(task); }
 
   // ── 적 ────────────────────────────────────────────────────────────
 
+  /**
+   * 잡몹을 만든다 (보스는 엔진이 이미 만들어 s.boss로 준다).
+   * @param {EnemyOptions} opts
+   * @returns {import('./enemy.js').Enemy}
+   */
   spawn(opts = {}) {
     const enemy = new Enemy(opts);
     this.enemies.push(enemy);
@@ -335,52 +587,95 @@ export class Stage {
   //   each            : (bullet, i, count) => void, 생성 직후 콜백
   // 그 밖의 키는 전부 탄 속성으로 넘어간다.
 
-  /** 탄 하나. */
+  /**
+   * 탄 하나를 쏜다.
+   * @param {FireOptions} opts
+   * @returns {import('./bullets.js').Bullet | null}
+   */
   fire(opts) {
-    return this._emit([{ x: 0, y: 0, angle: opts.angle ?? 0 }], opts)[0] ?? null;
+    return this._emit([{ x: 0, y: 0, angle: opts.angle ?? 0, tangent: 0 }], opts)[0] ?? null;
   }
 
-  /** 원형 일제사. { count, angle(시작각), radius(중심에서 띄우기) } */
+  /**
+   * 원형 일제사. count발이 360도에 고르게 퍼진다.
+   * @param {FireOptions} opts angle=첫 탄 각도, radius=중심에서 띄울 거리
+   * @returns {import('./bullets.js').Bullet[]}
+   */
   fireRing(opts = {}) {
     return this._emit(L.ringPoints(opts), opts);
   }
 
-  /** 부채꼴. spread는 전체 벌어짐 각(라디안), angle은 중심각. */
+  /**
+   * 부채꼴로 쏜다.
+   * @param {FireOptions} opts angle=중심각, spread=전체 벌어짐 각(라디안)
+   * @returns {import('./bullets.js').Bullet[]}
+   */
   fireFan(opts = {}) {
     return this._emit(L.fanPoints(opts), opts);
   }
 
-  /** 선분 위 등간격 배치. { from, to, count } — from/to는 origin 기준(기본 절대좌표) */
+  /**
+   * 선분 위에 등간격으로 배치해 쏜다.
+   * @param {FireOptions} opts from/to = 선분의 양 끝
+   * @returns {import('./bullets.js').Bullet[]}
+   */
   fireLine(opts = {}) {
     return this._emit(L.linePoints(opts), opts);
   }
 
-  /** 원호 위 배치. { radius, from, to, count } */
+  /**
+   * 원호 위에 배치해 쏜다.
+   * @param {FireOptions & {from?: number, to?: number}} opts from/to = 시작·끝 각도(라디안)
+   * @returns {import('./bullets.js').Bullet[]}
+   */
   fireArcAt(opts = {}) {
     return this._emit(L.arcPoints(opts), { facing: 'out', ...opts });
   }
 
-  /** 정다각형 배치. { sides, radius, perSide, mode: 'outline'|'vertex' } */
+  /**
+   * 정다각형 모양으로 배치해 쏜다. 모양 그대로 커지게 하려면 keepShape: true.
+   * @param {FireOptions} opts sides=변 수, radius=크기, perSide=변마다 발 수
+   * @returns {import('./bullets.js').Bullet[]}
+   */
   firePolygon(opts = {}) {
     return this._emit(L.polygonPoints(opts), { facing: 'out', ...opts });
   }
 
-  /** 별 배치. { points, inner, outer, perEdge } */
+  /**
+   * 별 모양으로 배치해 쏜다.
+   * @param {FireOptions} opts points=뿔 수, inner/outer=안팎 반지름
+   * @returns {import('./bullets.js').Bullet[]}
+   */
   fireStar(opts = {}) {
     return this._emit(L.starPoints(opts), { facing: 'out', ...opts });
   }
 
-  /** 격자 배치. { cols, rows, gapX, gapY } */
+  /**
+   * 격자로 배치해 쏜다.
+   * @param {FireOptions} opts cols/rows=열·행, gapX/gapY=간격
+   * @returns {import('./bullets.js').Bullet[]}
+   */
   fireGrid(opts = {}) {
     return this._emit(L.gridPoints(opts), opts);
   }
 
-  /** 임의 경로 위 배치. path는 t(0~1) => {x, y} */
+  /**
+   * 임의 경로 위에 배치해 쏜다. path는 s.pathPolygon() 등으로 만든다.
+   * @param {(t: number) => {x: number, y: number}} path t는 0~1
+   * @param {FireOptions} opts
+   * @returns {import('./bullets.js').Bullet[]}
+   */
   firePath(path, opts = {}) {
     return this._emit(L.pathPoints(path, opts), opts);
   }
 
   /** 배치된 점들을 실제 탄으로 만든다. */
+  /**
+   * 배치된 점들을 실제 탄으로 만든다.
+   * @param {Array<{x: number, y: number, angle?: number, tangent?: number}>} points
+   * @param {FireOptions} opts
+   * @returns {import('./bullets.js').Bullet[]}
+   */
   _emit(points, opts) {
     const origin = opts.origin ?? opts.center ?? { x: opts.x ?? 0, y: opts.y ?? 0 };
     const rotation = opts.rotation ?? 0;
@@ -394,6 +689,13 @@ export class Stage {
     const cos = rotation ? Math.cos(rotation) : 1;
     const sin = rotation ? Math.sin(rotation) : 0;
 
+    // keepShape: 배치가 모양 그대로 확대되도록 기준점에서 먼 탄일수록 빠르게 한다.
+    // (facing: 'out' 만 쓰면 모든 탄이 같은 속도로 방사상 이동해서 모서리가 뭉개진다)
+    let maxDist = 0;
+    if (opts.keepShape) {
+      for (const p of points) maxDist = Math.max(maxDist, Math.hypot(p.x, p.y));
+    }
+
     for (let i = 0; i < n; i++) {
       const p = points[i];
       const lx = rotation ? p.x * cos - p.y * sin : p.x;
@@ -406,6 +708,14 @@ export class Stage {
       if (facing === undefined) angle = (p.angle ?? opts.angle ?? 0) + rotation;
       else if (typeof facing === 'number') angle = facing;
       else if (facing === 'along') angle = (p.tangent ?? p.angle ?? 0) + rotation;
+      else if (facing === 'normal') {
+        // 변(접선)의 수직 방향, 바깥쪽. 다각형이 모양을 유지한 채 커진다.
+        // ('out'은 중심에서 방사상이라 꼭짓점 쪽이 늘어난다)
+        const t = (p.tangent ?? p.angle ?? 0) + rotation;
+        angle = t + Math.PI / 2;
+        // 중심 반대쪽을 향하도록 보정
+        if (Math.cos(angle) * lx + Math.sin(angle) * ly < 0) angle += Math.PI;
+      }
       else if (facing === 'aim') angle = Math.atan2(this.player.y - y, this.player.x - x);
       else if (facing === 'in' || facing === 'out') {
         const away = lx === 0 && ly === 0
@@ -417,8 +727,14 @@ export class Stage {
       if (aimType === 'aim') angle += Math.atan2(this.player.y - y, this.player.x - x);
       else if (aimType === 'sequence') angle += this.lastAngle;
 
+      if (this.frame < 180) this.checkAngleUnit(angle);
+
+      /** @type {FireOptions & {x: number, y: number, angle: number}} */
       const props = { ...base, x, y, angle };
       if (ramp) applyRamp(props, ramp, n > 1 ? i / (n - 1) : 0);
+      if (opts.keepShape && maxDist > 0) {
+        props.speed = (props.speed ?? 0) * (Math.hypot(p.x, p.y) / maxDist);
+      }
 
       const b = this.bullets.spawn(props);
       if (b) {
@@ -438,12 +754,37 @@ export class Stage {
     return out;
   }
 
+  /**
+   * 각도 자리에 도(°)를 그대로 넣는 실수를 잡는다.
+   * 한 바퀴가 6.28(라디안)인데 25를 넘는 값이 오면 90, 359 같은 도 값일 가능성이 크다.
+   * 판 시작 후 3초 동안만 보고, 한 번만 알린다 (angle += 로 누적된 값을 오해하지 않도록).
+   */
+  checkAngleUnit(angle) {
+    if (this.angleWarned || Math.abs(angle) < 25 || !Number.isFinite(angle)) return;
+    this.angleWarned = true;
+    console.warn(
+      `[danmaku] angle 에 ${angle.toFixed(1)} 이 들어왔습니다. 각도는 라디안이라 한 바퀴가 ${TAU.toFixed(2)} 입니다.
+` +
+      `  도(°)를 쓰셨다면 s.deg(...) 로 감싸세요.  예: angle: s.deg(90)  /  s.rand(0, s.TAU)`,
+    );
+  }
+
   /** 탄 배열을 나중에 한꺼번에 조작하기 위한 래퍼 */
+  /**
+   * 쏜 탄들을 한 묶음으로 잡아 둔다. 나중에 g.each() 등으로 한꺼번에 조작.
+   * @param {import('./bullets.js').Bullet[]|import('./bullets.js').Bullet} bullets fire*가 돌려준 배열
+   * @returns {import('./group.js').BulletGroup}
+   */
   group(bullets) {
     return new BulletGroup(Array.isArray(bullets) ? bullets : [bullets]);
   }
 
   /** 예약 변경을 심는다. target은 탄 하나, 배열, 또는 group. */
+  /**
+   * 예약 변경을 심는다. [{ at: 60, speed: 0 }, { at: 90, angle: 'aim' }]
+   * @param {any} target 탄, 탄 배열, 또는 group
+   * @param {Array<Record<string, any>>} steps at은 탄의 나이(프레임)
+   */
   plan(target, steps) {
     const list = target instanceof BulletGroup ? target.bullets
       : Array.isArray(target) ? target : [target];
@@ -456,6 +797,7 @@ export class Stage {
   }
 
   /** 화면의 모든 적탄 제거 (bombProof 포함) */
+  /** 화면의 적탄을 전부 지운다 (bombProof 포함). */
   clearBullets() {
     this.bullets.clear();
   }
@@ -485,11 +827,74 @@ export class Stage {
   }
 
   /** 더 센 흔들림이 이미 걸려 있으면 덮어쓰지 않는다. */
+  /**
+   * 화면을 흔든다. 폭탄은 (10, 24), 사망은 (7, 20).
+   * @param {number} amount 진폭(px)
+   * @param {number} [frames] 지속 프레임
+   */
   addShake(amount, frames = 18) {
     if (amount < this.shake) return;
     this.shakeAmp = amount;
     this.shakeTotal = Math.max(1, frames);
     this.shakeLeft = this.shakeTotal;
+  }
+
+  // ── 도움말 ────────────────────────────────────────────────────────
+
+  /**
+   * 콘솔에 쓸 수 있는 것 전부를 묶어서 찍는다.
+   *   engine.stage.help()        전체 목록
+   *   engine.stage.help('fire')  이름에 fire가 들어간 것만
+   */
+  help(filter = '') {
+    const groups = {
+      '발사': ['fire', 'fireRing', 'fireFan', 'fireLine', 'fireArcAt', 'firePolygon', 'fireStar', 'fireGrid', 'firePath'],
+      '탄 조작': ['group', 'plan', 'clearBullets', 'clearBombable', 'bomb'],
+      '대기 (yield와 함께)': ['wait', 'until', 'untilGauge', 'untilPhaseChange', 'join'],
+      '병렬 태스크': ['fork', 'cancel', 'every', 'after', 'burst', 'ramp', 'times', 'parallel', 'sequence'],
+      '적': ['spawn'],
+      '각도·좌표': ['deg', 'aim', 'angleTo', 'polar', 'dist', 'wrapAngle', 'angleDiff', 'approach', 'approachAngle', 'rotateAround', 'lerp', 'clamp'],
+      '경로': ['pathCircle', 'pathPolygon', 'pathStar', 'pathLine', 'pathLissajous', 'pathRose', 'pathBezier', 'pathTangent'],
+      '난수': ['rand', 'randInt', 'pick', 'randCircle', 'randEdge', 'randSign', 'randAngle', 'shuffle', 'weighted'],
+      '색': ['hsv', 'hsl', 'oklch', 'mix', 'gradient', 'hueShift', 'lightenColor', 'rainbow'],
+      '연출': ['addShake'],
+    };
+    const values = {
+      '읽기 전용': ['boss', 'player', 'px', 'py', 'enemies', 'frame', 'gauge', 'phase', 'remaining',
+        'bulletCount', 'bounds', 'mode', 'thresholds', 'result', 'C', 'ease', 'TAU', 'PI'],
+    };
+
+    const f = filter.toLowerCase();
+    const hit = (n) => !f || n.toLowerCase().includes(f);
+
+    console.log('%c탄막 API (s.___)', 'font-weight:bold;font-size:13px');
+    for (const [title, names] of Object.entries(groups)) {
+      const list = names.filter(hit);
+      if (list.length) console.log(`%c${title}%c  ${list.map((n) => `s.${n}()`).join('  ')}`,
+        'color:#7fd0ff;font-weight:bold', 'color:inherit');
+    }
+    for (const [title, names] of Object.entries(values)) {
+      const list = names.filter(hit);
+      if (list.length) console.log(`%c${title}%c  ${list.map((n) => `s.${n}`).join('  ')}`,
+        'color:#ffd27f;font-weight:bold', 'color:inherit');
+    }
+
+    // 목록에 없는 게 생기면 여기서 드러난다.
+    const known = new Set([...Object.values(groups).flat(), ...Object.values(values).flat()]);
+    const rest = Object.getOwnPropertyNames(Stage.prototype)
+      .filter((n) => n !== 'constructor' && !n.startsWith('_') && !known.has(n) && hit(n));
+    if (rest.length) console.log('%c기타%c  ' + rest.join('  '), 'color:#8fa0bb', 'color:inherit');
+
+    if (!f || '색'.includes(f) || 'color'.includes(f) || 'c'.startsWith(f)) {
+      const swatches = Object.keys(C).map((k) => `%c ${k} `).join('');
+      console.log(
+        `%c팔레트(s.C)%c  ${swatches}`,
+        'color:#ffd27f;font-weight:bold', 'color:inherit',
+        ...Object.values(C).map((v) => `background:${v};color:#111;border-radius:2px`),
+      );
+    }
+    console.log('%c치트시트: docs/cheatsheet.md   전체 명세: docs/patterns.md', 'color:#7d8ba3');
+    return undefined;
   }
 
   // ── 진행 ──────────────────────────────────────────────────────────
@@ -508,7 +913,7 @@ export class Stage {
 
     this.scheduler.update();
     this.player.update(input);
-    this.bullets.update(this);
+    this.bullets.update(this.api);
 
     let n = 0;
     for (let i = 0; i < this.enemies.length; i++) {

@@ -1,0 +1,14 @@
+{
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6",
+    "prettier-eslint": "^17.1.1",
+    "typescript": "^6.0.3"
+  },
+  "scripts": {
+    "check": "tsc --noEmit -p jsconfig.json",
+    "lint": "eslint src"
+  }
+}

@@ -10,32 +10,53 @@ export class Bullet {
   }
 
   reset() {
+    /** 위치 x */
     this.x = 0;
+    /** 위치 y (아래쪽이 +) */
     this.y = 0;
+    /** 프레임당 픽셀 */
     this.speed = 0;
+    /** 진행 방향(라디안). s.deg(90)=아래 */
     this.angle = 0;
-    this.accel = 0;      // 프레임당 속도 증가
-    this.omega = 0;      // 프레임당 각도 증가 (라디안)
+    /** 프레임당 속도 증감 */
+    this.accel = 0;
+    /** 프레임당 각도 증감(라디안). 휘는 탄 */
+    this.omega = 0;
     this.minSpeed = -Infinity;
     this.maxSpeed = Infinity;
-    this.r = 2.5;        // 판정 반지름
-    this.size = 3;       // 그리기 크기 (모양마다 해석이 다르다, render.js 참고)
-    this.shape = 'circle'; // 'circle' | 'orb' | 'wedge' | 'rod'
+    /** 판정 반지름 */
+    this.r = 2.5;
+    /** 그리기 크기 (모양마다 해석이 다르다) */
+    this.size = 3;
+    /** @type {'circle'|'orb'|'wedge'|'rod'} 탄 모양 */
+    this.shape = 'circle';
+    /** CSS 색 */
     this.color = '#ff5577';
+    /** 태어난 뒤 지난 프레임 수 (읽기용) */
     this.age = 0;
-    this.life = 0;       // 0이면 수명 무제한
+    /** 수명 프레임. 0이면 무제한 */
+    this.life = 0;
+    /** 이미 스침 판정을 먹었는지 (읽기용) */
     this.grazed = false;
-    this.bombProof = false; // true면 폭탄/사망 효과로 지워지지 않는다
-    this.onUpdate = null; // (bullet, stage) => void
-    this.data = null;     // 패턴이 자유롭게 쓰는 칸
+    /** true면 폭탄/사망 효과로 지워지지 않는다 */
+    this.bombProof = false;
+    /** @type {((b: Bullet, s: import('./stage.js').Stage) => void) | null} 매 프레임 호출 */
+    this.onUpdate = null;
+    /** @type {any} 패턴이 자유롭게 쓰는 칸 (이름표 등) */
+    this.data = null;
 
-    this.delay = 0;       // 남은 등장 지연 프레임 (그동안 판정 없음)
+    /** 남은 등장 지연 프레임 (그동안 판정 없음) */
+    this.delay = 0;
     this.delayTotal = 0;
-    this.motion = null;   // 거동 모듈 { type, ... }
-    this.ms = null;       // 거동 모듈이 쓰는 상태
-    this.plan = null;     // 예약 변경 목록
-    this.pi = 0;          // 다음에 적용할 plan 인덱스
-    this.tw = null;       // 진행 중인 보간 목록
+    /** @type {import('./stage.js').MotionOptions | null} 거동 모듈 */
+    this.motion = null;
+    /** @type {any} 거동 모듈이 쓰는 내부 상태 */
+    this.ms = null;
+    /** @type {import('./stage.js').PlanStep[] | null} 예약 변경 목록 */
+    this.plan = null;
+    this.pi = 0;
+    /** @type {any[] | null} 진행 중인 보간 목록 */
+    this.tw = null;
   }
 }
 

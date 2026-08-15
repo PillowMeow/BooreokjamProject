@@ -263,7 +263,7 @@ function lighten(v) {
 function toRgb(color) {
   probe.fillStyle = '#000';
   probe.fillStyle = color;          // 브라우저가 '#rrggbb' 또는 'rgb(...)'로 정규화해 준다
-  const css = probe.fillStyle;
+  const css = /** @type {string} */ (probe.fillStyle);
   if (css[0] === '#') {
     const n = parseInt(css.slice(1, 7), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];

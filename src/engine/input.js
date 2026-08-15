@@ -40,7 +40,7 @@ export class Input {
 
   onKey(e, down) {
     // UI 요소에 포커스가 가 있으면 게임 입력으로 먹지 않는다.
-    const tag = e.target?.tagName;
+    const tag = /** @type {HTMLElement} */ (e.target)?.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'BUTTON' || tag === 'TEXTAREA') return;
 
     const action = KEY_MAP[e.code];

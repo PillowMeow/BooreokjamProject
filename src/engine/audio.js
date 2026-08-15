@@ -35,7 +35,7 @@ class Audio {
       if (this.ctx.state === 'suspended') this.ctx.resume();
       return;
     }
-    const AC = window.AudioContext || window.webkitAudioContext;
+    const AC = window.AudioContext || /** @type {any} */ (window).webkitAudioContext;
     if (!AC) return;
     this.ctx = new AC();
     this.master = this.ctx.createGain();

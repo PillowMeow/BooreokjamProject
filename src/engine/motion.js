@@ -205,7 +205,7 @@ function applyStep(b, step, st) {
   }
   const over = step.over ?? 0;
   for (const key in step) {
-    if (key === 'at' || key === 'over' || key === 'vanish') continue;
+    if (key === 'at' || key === 'over' || key === 'vanish' || key === 'ease') continue;
     let v = step[key];
     if (v === 'aim') v = st.aim(b);
     else if (typeof v === 'function') v = v(b, st);

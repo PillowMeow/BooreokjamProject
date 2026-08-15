@@ -64,15 +64,15 @@ export function createUI(engine, loadPath, currentPath) {
   `;
   document.body.appendChild(root);
 
-  const pick = root.querySelector('.pick');
-  const file = root.querySelector('input[type=file]');
-  const restart = root.querySelector('.restart');
-  const pause = root.querySelector('.pause');
+  const pick = /** @type {HTMLSelectElement} */ (root.querySelector('.pick'));
+  const file = /** @type {HTMLInputElement} */ (root.querySelector('input[type=file]'));
+  const restart = /** @type {HTMLButtonElement} */ (root.querySelector('.restart'));
+  const pause = /** @type {HTMLButtonElement} */ (root.querySelector('.pause'));
   const status = root.querySelector('.status');
   const error = root.querySelector('.error');
   const diff = root.querySelector('.diff');
-  const mute = root.querySelector('.mute');
-  const vol = root.querySelector('.vol');
+  const mute = /** @type {HTMLButtonElement} */ (root.querySelector('.mute'));
+  const vol = /** @type {HTMLInputElement} */ (root.querySelector('.vol'));
 
   for (const p of PATTERNS) {
     const opt = document.createElement('option');
@@ -155,7 +155,7 @@ export function createUI(engine, loadPath, currentPath) {
   });
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyM' && !e.repeat) {
-      const tag = e.target?.tagName;
+      const tag = /** @type {HTMLElement} */ (e.target)?.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'BUTTON') return;
       audio.setMuted(!audio.muted);
       syncMute();

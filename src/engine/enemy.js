@@ -26,6 +26,8 @@ export class Enemy {
     this.age = 0;
     this.onDeath = opts.onDeath ?? null;  // (enemy, stage) => void
     this.data = opts.data ?? null;
+    /** @type {(genOrFn: any) => any} 이 적이 죽으면 같이 끝나는 태스크 (Stage.spawn이 붙인다) */
+    this.fork = () => { throw new Error('s.spawn()으로 만든 적에만 fork가 붙는다'); };
   }
 
   /** 사각 히트박스를 쓰는가 */

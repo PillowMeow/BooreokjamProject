@@ -24,7 +24,7 @@ export function parseColor(css) {
   } else if (probe) {
     probe.fillStyle = '#000';
     probe.fillStyle = css;
-    const norm = probe.fillStyle;
+    const norm = /** @type {string} */ (probe.fillStyle);
     if (norm[0] === '#') {
       const n = parseInt(norm.slice(1, 7), 16);
       rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
