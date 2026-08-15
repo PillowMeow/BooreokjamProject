@@ -1,24 +1,4 @@
-# danmaku sim
-
-브라우저에서 도는 탄막 시뮬레이터. 탄막은 `.js` 파일 하나로 작성하고, 엔진이 동적 `import()`로 불러와 재생한다.
-UI는 우측 상단의 작은 패널 하나뿐이다 (탄막 선택 / 로컬 파일 열기 / 재시작 / 일시정지 / 상태).
-마우스를 올리기 전에는 흐릿하게 있는다.
-
-## 실행
-
-ES 모듈이라 `file://`로는 안 되고 정적 서버가 필요하다.
-
-```bash
-python -m http.server 8123
-```
-
-- `http://localhost:8123/` — 기본 패턴(`src/patterns/sample.js`)
-- `http://localhost:8123/?p=./patterns/spiral.js` — 다른 패턴 (경로는 `src/` 기준)
-- `?seed=999` — 난수 시드 고정 (같은 시드 + 같은 조작 = 같은 결과)
-
-UI 패널의 드롭다운은 [`src/patterns/index.js`](src/patterns/index.js)의 목록을 읽는다. 패턴을 추가하면 여기에 한 줄 넣으면 된다.
-"파일 열기"로 고른 로컬 `.js`는 Blob URL로 import 되므로 **그 파일 안에서 다른 파일을 상대 경로로 import 할 수는 없다** (한 파일로 끝나야 한다).
-드롭다운으로 고른 패턴은 `?p=`로 주소에 반영되므로 새로고침해도 유지된다.
+# BOOREOKJAM PROJECT
 
 ## 조작
 
