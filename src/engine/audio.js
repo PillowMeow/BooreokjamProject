@@ -7,9 +7,9 @@
 const PRESETS = {
   // type: 파형, f0 -> f1 로 dur초 동안 미끄러진다
   circle: { type: 'triangle', f0: 760, f1: 520, dur: 0.07, gain: 0.30 },
-  orb:    { type: 'sine',     f0: 210, f1: 95,  dur: 0.20, gain: 0.55, sub: true },
-  wedge:  { type: 'square',   f0: 1250, f1: 780, dur: 0.05, gain: 0.16 },
-  rod:    { type: 'sawtooth', f0: 320, f1: 1500, dur: 0.09, gain: 0.18 },
+  orb:    { type: 'sine',     f0: 420, f1: 190,  dur: 0.20, gain: 0.55, sub: true },
+  wedge:  { type: 'square',   f0: 1000, f1: 650, dur: 0.05, gain: 0.16 },
+  rod:    { type: 'sawtooth', f0: 400, f1: 800, dur: 0.09, gain: 0.18 },
 
   bomb:   { type: 'sine',     f0: 300, f1: 40,  dur: 0.55, gain: 0.7, noise: 0.5 },
   death:  { type: 'sawtooth', f0: 420, f1: 60,  dur: 0.40, gain: 0.5, noise: 0.25 },
