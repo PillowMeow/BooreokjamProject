@@ -1,4 +1,12 @@
 import { FIELD_W, FIELD_H, LEFT, RIGHT, TOP, BOTTOM, TAU } from './config.js';
+import { oklch } from './color.js';
+
+// 결과 화면에 표시할 난이도 항목 (UI 패널과 같은 순서·이름)
+const DIFF_KEYS = [
+  ['density', '탄밀'],
+  ['speed', '탄속'],
+  ['special', '특수'],
+];
 
 // 최소한의 그리기. 무엇이 어디 있는지 + 탄 모양 구분 + 보스 게이지가 전부다.
 
@@ -61,6 +69,7 @@ export class Renderer {
     // 게이지와 결과는 흔들리지 않는다.
     ctx.setTransform(s, 0, 0, s, -LEFT * s, -TOP * s);
     this.drawBossBar(ctx, stage);
+    this.drawTitle(ctx, stage);
     this.drawResult(ctx, stage);
   }
 
@@ -181,39 +190,127 @@ export class Renderer {
     }
   }
 
+  /**
+   * 스펠 카드 이름.
+   *   0 ~ 60프레임   : 화면 중앙 오른쪽에 크게 (처음 12프레임 동안 스르륵 등장)
+   *  60 ~ 90프레임   : 작아지면서 오른쪽 위 구석으로 이동
+   *  90프레임 ~      : 구석에 그대로
+   */
+  drawTitle(ctx, stage) {
+    const title = stage.title;
+    if (!title) return;
+
+    const APPEAR = 60;   // 크게 떠 있는 시간
+    const MOVE = 30;     // 올라가며 작아지는 시간
+
+    const big = { x: RIGHT - 24, y: 6, font: 16 };
+    const small = { x: RIGHT - 6, y: TOP + BOSS_BAR_H + 13, font: 9 };
+
+    // 0 = 중앙 오른쪽(큼), 1 = 구석(작음)
+    let k = 0;
+    if (title.age >= APPEAR) {
+      const u = Math.min(1, (title.age - APPEAR) / MOVE);
+      k = u < 0.5 ? 2 * u * u : 1 - 2 * (1 - u) * (1 - u);
+    }
+
+    const x = big.x + (small.x - big.x) * k;
+    const y = big.y + (small.y - big.y) * k;
+    const font = big.font + (small.font - big.font) * k;
+
+    // 등장할 때 살짝 밀려 들어오면서 나타난다
+    const inT = Math.min(1, title.age / 12);
+    const slide = (1 - inT) * 24;
+    const alpha = 0.15 + 0.85 * inT;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'right';
+    ctx.font = `bold ${font.toFixed(1)}px ui-monospace, Consolas, monospace`;
+
+    // 탄 위에서도 읽히도록 어두운 테두리
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(4, 6, 12, 0.85)';
+    ctx.strokeText(title.text, x + slide, y);
+    ctx.fillStyle = '#ffe7a8';
+    ctx.fillText(title.text, x + slide, y);
+
+    // 큰 상태일 때만 밑줄
+    if (k < 1) {
+      const w = ctx.measureText(title.text).width;
+      ctx.globalAlpha = alpha * (1 - k);
+      ctx.fillStyle = 'rgba(255, 231, 168, 0.6)';
+      ctx.fillRect(x + slide - w, y + 5, w, 1);
+    }
+
+    ctx.restore();
+    ctx.textAlign = 'start';
+  }
+
   drawResult(ctx, stage) {
     const r = stage.result;
     if (!r) return;
 
-    const lines = [
-      stage.mode === 'survival' ? '생존 성공' : '격파',
-      '',
+    const name = stage.pattern?.name ?? '이름 없는 탄막';
+    const diff = stage.pattern?.difficulty ?? null;
+    const stats = [
       `클리어 시간   ${r.seconds.toFixed(2)}초`,
       `폭탄          ${r.bombs}회`,
       `사망          ${r.deaths}회`,
       `그레이즈      ${(r.grazeRatio * 100).toFixed(1)}%  (${r.graze} / ${r.fired})`,
     ];
 
-    const boxW = 240;
-    const boxH = 22 + lines.length * 16;
+    const boxW = 250;
+    const diffH = diff ? DIFF_KEYS.length * 13 + 6 : 0;
+    const boxH = 62 + diffH + stats.length * 16;
     const x = -boxW / 2;
     const y = -boxH / 2;
 
-    ctx.fillStyle = 'rgba(6, 8, 14, 0.88)';
+    ctx.fillStyle = 'rgba(6, 8, 14, 0.9)';
     ctx.fillRect(x, y, boxW, boxH);
     ctx.strokeStyle = 'rgba(160, 190, 230, 0.35)';
     ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, boxW - 1, boxH - 1);
 
     ctx.textAlign = 'center';
+
+    // 클리어한 탄막 이름
     ctx.font = 'bold 15px ui-monospace, Consolas, monospace';
     ctx.fillStyle = '#ffe7a8';
-    ctx.fillText(lines[0], 0, y + 26);
+    ctx.fillText(name, 0, y + 24);
 
+    // 격파 / 생존 성공
+    ctx.font = '11px ui-monospace, Consolas, monospace';
+    ctx.fillStyle = stage.mode === 'survival' ? '#8fc2ff' : '#ff9aa8';
+    ctx.fillText(stage.mode === 'survival' ? '생존 성공' : '격 파', 0, y + 40);
+
+    // 난이도 막대
+    let cursor = y + 52;
+    if (diff) {
+      ctx.font = '9px ui-monospace, Consolas, monospace';
+      ctx.textAlign = 'left';
+      for (const [key, label] of DIFF_KEYS) {
+        const v = diff[key] ?? 0;
+        const bx = x + 76;
+        ctx.fillStyle = '#8fa0bb';
+        ctx.fillText(label, x + 52, cursor + 7);
+        for (let i = 0; i < 10; i++) {
+          ctx.fillStyle = i < v ? oklch(0.78, 0.19, 145 - (i / 9) * 145) : 'rgba(140,170,220,0.16)';
+          ctx.fillRect(bx + i * 9, cursor, 7, 7);
+        }
+        ctx.fillStyle = '#dbe6f5';
+        ctx.fillText(String(v), bx + 94, cursor + 7);
+        cursor += 13;
+      }
+      ctx.textAlign = 'center';
+      cursor += 6;
+    }
+
+    // 기록
     ctx.font = '12px ui-monospace, Consolas, monospace';
     ctx.fillStyle = '#cfdcef';
-    for (let i = 2; i < lines.length; i++) {
-      ctx.fillText(lines[i], 0, y + 26 + (i - 1) * 16);
+    for (const line of stats) {
+      ctx.fillText(line, 0, cursor + 12);
+      cursor += 16;
     }
 
     ctx.font = '10px ui-monospace, Consolas, monospace';

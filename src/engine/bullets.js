@@ -45,6 +45,8 @@ export class Bullet {
     /** @type {any} 패턴이 자유롭게 쓰는 칸 (이름표 등) */
     this.data = null;
 
+    /** 이 거리 이상 필드 밖으로 나가면 제거된다 (기본 CULL_MARGIN=48) */
+    this.margin = CULL_MARGIN;
     /** 남은 등장 지연 프레임 (그동안 판정 없음) */
     this.delay = 0;
     this.delayTotal = 0;
@@ -154,9 +156,10 @@ export class BulletPool {
       b.age++;
 
       const expired = b.life > 0 && b.age >= b.life;
+      const m = b.margin;
       const outside =
-        b.x < LEFT - CULL_MARGIN || b.x > RIGHT + CULL_MARGIN ||
-        b.y < TOP - CULL_MARGIN || b.y > BOTTOM + CULL_MARGIN;
+        b.x < LEFT - m || b.x > RIGHT + m ||
+        b.y < TOP - m || b.y > BOTTOM + m;
 
       if (expired || outside || !b.alive) {
         b.alive = false;

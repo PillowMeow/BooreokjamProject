@@ -16,7 +16,7 @@ import { guardStage } from './guard.js';
 const BULLET_KEYS = [
   'speed', 'accel', 'omega', 'minSpeed', 'maxSpeed',
   'r', 'size', 'shape', 'color', 'life', 'bombProof',
-  'onUpdate', 'data', 'delay', 'motion', 'plan',
+  'onUpdate', 'data', 'delay', 'motion', 'plan', 'margin',
 ];
 
 /**
@@ -97,6 +97,7 @@ const BULLET_KEYS = [
  * -- 기타 --
  * @property {number} [life] 수명 프레임 (0=무제한)
  * @property {number} [delay] 등장 지연. 그동안 판정 없이 예고 표시
+ * @property {number} [margin] 필드 밖 이 거리까지 살아 있는다 (기본 48). 화면 옆 바깥에서 등장시킬 때 키운다
  * @property {boolean} [bombProof] 폭탄으로 안 지워짐
  * @property {any} [data] 자유롭게 쓰는 칸 (이름표 등)
  * @property {false|'circle'|'orb'|'wedge'|'rod'} [sound] false면 무음
@@ -182,6 +183,8 @@ export class Stage {
     this.result = null;
     this.mainTask = null;
     this.boss = null;
+    /** @type {{text: string, age: number} | null} 화면에 떠 있는 스펠 카드 이름 */
+    this.title = null;
 
     this.mode = pattern.clear === 'survival' ? 'survival' : 'boss';
     this.duration = Math.round((pattern.seconds ?? 60) * FPS);
@@ -828,6 +831,22 @@ export class Stage {
 
   /** 더 센 흔들림이 이미 걸려 있으면 덮어쓰지 않는다. */
   /**
+   * 스펠 카드 이름을 화면에 띄운다.
+   * 60프레임 동안 화면 중앙 오른쪽에 크게 떠 있다가, 30프레임에 걸쳐 작아지며
+   * 오른쪽 위 구석(체력바 바로 밑)으로 올라가 그대로 남는다.
+   * 한 번에 하나만 표시되며, 다시 부르면 새 이름으로 바뀐다.
+   * @param {string} text
+   */
+  showTitle(text) {
+    this.title = { text: String(text), age: 0 };
+  }
+
+  /** 떠 있는 스펠 카드 이름을 지운다. */
+  hideTitle() {
+    this.title = null;
+  }
+
+  /**
    * 화면을 흔든다. 폭탄은 (10, 24), 사망은 (7, 20).
    * @param {number} amount 진폭(px)
    * @param {number} [frames] 지속 프레임
@@ -857,7 +876,7 @@ export class Stage {
       '경로': ['pathCircle', 'pathPolygon', 'pathStar', 'pathLine', 'pathLissajous', 'pathRose', 'pathBezier', 'pathTangent'],
       '난수': ['rand', 'randInt', 'pick', 'randCircle', 'randEdge', 'randSign', 'randAngle', 'shuffle', 'weighted'],
       '색': ['hsv', 'hsl', 'oklch', 'mix', 'gradient', 'hueShift', 'lightenColor', 'rainbow'],
-      '연출': ['addShake'],
+      '연출': ['addShake', 'showTitle', 'hideTitle'],
     };
     const values = {
       '읽기 전용': ['boss', 'player', 'px', 'py', 'enemies', 'frame', 'gauge', 'phase', 'remaining',
@@ -900,6 +919,8 @@ export class Stage {
   // ── 진행 ──────────────────────────────────────────────────────────
 
   update(input) {
+    if (this.title) this.title.age++;
+
     if (this.result) {
       // 클리어 후에도 화면은 계속 그려지지만 시뮬레이션은 멈춘다.
       if (this.shakeLeft > 0) this.shakeLeft--;

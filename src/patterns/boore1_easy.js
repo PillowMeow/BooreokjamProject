@@ -1,5 +1,5 @@
 export default {
-    name: '부레옥잠 (EASY)',
+    name: '평범한 부레옥잠 (EASY)',
 
     clear: 'boss',
     hp: 1600,

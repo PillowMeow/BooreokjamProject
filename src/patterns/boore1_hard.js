@@ -1,11 +1,11 @@
 export default {
-    name: '부레옥잠 (HARD)',
+    name: '평범한 부레옥잠 (HARD)',
 
     clear: 'boss',
     hp: 2400,
 
     thresholds: [0.33, 0.66],
-    difficulty: { density: 3, speed: 3, special: 2 },
+    difficulty: { density: 5, speed: 4, special: 2 },
 
     *main(s) {
         const boss = s.boss;
